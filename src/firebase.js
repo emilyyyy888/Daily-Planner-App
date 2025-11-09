@@ -8,13 +8,13 @@ import { getFirestore } from 'firebase/firestore';
 
 // TODO: Replace with your Firebase config from Firebase Console
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
-};
+    apiKey: "AIzaSyB2rnRFcha4ZcqPL5SdGHTZdiZiJMg9t9s",
+    authDomain: "daily-planner-70b78.firebaseapp.com",
+    projectId: "daily-planner-70b78",
+    storageBucket: "daily-planner-70b78.firebasestorage.app",
+    messagingSenderId: "523028819983",
+    appId: "1:523028819983:web:883a8473b01f08fa32f37a"
+  };
 
 // Check if Firebase is configured
 const isConfigured = firebaseConfig.apiKey !== "YOUR_API_KEY" && 

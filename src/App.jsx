@@ -40,6 +40,7 @@ function App() {
   const [scheduledTasks, setScheduledTasks] = useState({}); // { date: [tasks] } Each task contains startTime(minutes) and duration(minutes)
   const [useFirebase, setUseFirebase] = useState(false); // Toggle between Firebase and localStorage
   const [isLoading, setIsLoading] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true); // Track if this is the first load
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -93,6 +94,7 @@ function App() {
             setScheduledTasks(tasks);
           });
 
+          setIsInitialLoad(false);
           return () => {
             unsubscribeDrafts();
             unsubscribeScheduled();
@@ -119,7 +121,20 @@ function App() {
           const parsed = JSON.parse(savedDrafts);
           if (Array.isArray(parsed)) {
             setDraftTasks(parsed);
+            if (parsed.length > 0) {
+              console.log(
+                "✅ Loaded draft tasks from localStorage:",
+                parsed.length,
+                "tasks"
+              );
+            } else {
+              console.log(
+                "✅ Loaded draft tasks from localStorage: 0 tasks (empty)"
+              );
+            }
           }
+        } else {
+          console.log("No draft tasks found in localStorage");
         }
         if (savedScheduled) {
           const data = JSON.parse(savedScheduled);
@@ -182,6 +197,17 @@ function App() {
           });
 
           setScheduledTasks(migratedData);
+          const taskCount = Object.values(migratedData).reduce(
+            (sum, tasks) => sum + tasks.length,
+            0
+          );
+          console.log(
+            "✅ Loaded scheduled tasks from localStorage:",
+            taskCount,
+            "tasks across",
+            Object.keys(migratedData).length,
+            "days"
+          );
           // Save migrated data
           try {
             localStorage.setItem(
@@ -191,9 +217,16 @@ function App() {
           } catch (error) {
             console.error("Failed to save migrated data:", error);
           }
+        } else {
+          console.log("No scheduled tasks found in localStorage");
         }
       } catch (error) {
         console.error("Failed to load data from localStorage:", error);
+      } finally {
+        // Mark initial load as complete after a small delay to ensure state updates
+        setTimeout(() => {
+          setIsInitialLoad(false);
+        }, 100);
       }
     };
 
@@ -202,14 +235,19 @@ function App() {
 
   // Save data to Firebase or localStorage
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || isInitialLoad) {
+      // Don't save during initial load
+      return;
+    }
 
-    // Skip saving on initial load
+    // Skip saving if empty and no existing data in localStorage
+    const existingDrafts = localStorage.getItem("draftTasks");
     if (
       draftTasks.length === 0 &&
-      !localStorage.getItem("draftTasks") &&
+      (!existingDrafts || existingDrafts === "[]") &&
       !useFirebase
     ) {
+      // Don't save empty array if there's no existing data
       return;
     }
 
@@ -247,16 +285,27 @@ function App() {
     };
 
     saveData();
-  }, [draftTasks, isLoading, useFirebase]);
+  }, [draftTasks, isLoading, useFirebase, isInitialLoad]);
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || isInitialLoad) {
+      // Don't save during initial load
+      return;
+    }
 
-    // Skip saving on initial load
+    // Get current saved data to compare
+    const existingScheduled = localStorage.getItem("scheduledTasks");
+    const currentScheduledStr = JSON.stringify(scheduledTasks);
+
+    // Skip saving if data hasn't changed
+    if (existingScheduled === currentScheduledStr) {
+      return;
+    }
+
+    // Skip saving if empty and no existing data
     if (
       Object.keys(scheduledTasks).length === 0 &&
-      !localStorage.getItem("scheduledTasks") &&
-      !useFirebase
+      (!existingScheduled || existingScheduled === "{}")
     ) {
       return;
     }
@@ -307,7 +356,7 @@ function App() {
     };
 
     saveData();
-  }, [scheduledTasks, isLoading, useFirebase]);
+  }, [scheduledTasks, isLoading, useFirebase, isInitialLoad]);
 
   const addDraftTask = (text, type = "other", id = null) => {
     const newTask = {
