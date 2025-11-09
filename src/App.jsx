@@ -15,6 +15,14 @@ import DraftPanel from "./components/DraftPanel";
 import DayView from "./components/DayView";
 import WeekView from "./components/WeekView";
 import MonthView from "./components/MonthView";
+import {
+  loadDraftTasks,
+  loadScheduledTasks,
+  saveDraftTasks,
+  saveScheduledTasks,
+  subscribeToDraftTasks,
+  subscribeToScheduledTasks,
+} from "./utils/firebaseStorage";
 import "./App.css";
 
 const TASK_TYPES = [
@@ -30,6 +38,8 @@ function App() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [draftTasks, setDraftTasks] = useState([]);
   const [scheduledTasks, setScheduledTasks] = useState({}); // { date: [tasks] } Each task contains startTime(minutes) and duration(minutes)
+  const [useFirebase, setUseFirebase] = useState(false); // Toggle between Firebase and localStorage
+  const [isLoading, setIsLoading] = useState(true);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -38,87 +48,266 @@ function App() {
     })
   );
 
-  // Load data from localStorage
+  // Check if Firebase is configured
   useEffect(() => {
-    const savedDrafts = localStorage.getItem("draftTasks");
-    const savedScheduled = localStorage.getItem("scheduledTasks");
-
-    if (savedDrafts) {
-      setDraftTasks(JSON.parse(savedDrafts));
-    }
-    if (savedScheduled) {
-      const data = JSON.parse(savedScheduled);
-
-      // Data migration: Convert old format { date-hour: [tasks] } to new format { date: [tasks] }
-      const migratedData = {};
-
-      Object.keys(data).forEach((key) => {
-        const tasks = data[key];
-
-        // Check if it's old format (contains - and last part is a number)
-        if (key.includes("-")) {
-          const parts = key.split("-");
-          const lastPart = parts[parts.length - 1];
-
-          if (
-            !isNaN(parseInt(lastPart)) &&
-            parseInt(lastPart) >= 0 &&
-            parseInt(lastPart) < 24
-          ) {
-            // This is old format: date-hour
-            const hour = parseInt(lastPart);
-            const date = parts.slice(0, -1).join("-");
-
-            if (!migratedData[date]) {
-              migratedData[date] = [];
-            }
-
-            // Migrate tasks, add startTime and duration
-            tasks.forEach((task) => {
-              migratedData[date].push({
-                ...task,
-                startTime: (task.hour !== undefined ? task.hour : hour) * 60,
-                duration: task.duration || 60,
-              });
-            });
-          } else {
-            // New format or unrecognized format, use directly
-            migratedData[key] = tasks.map((task) => ({
-              ...task,
-              startTime:
-                task.startTime !== undefined
-                  ? task.startTime
-                  : (task.hour || 0) * 60,
-              duration: task.duration || 60,
-            }));
-          }
+    const checkFirebase = async () => {
+      try {
+        const firebaseModule = await import("./firebase");
+        // Check if firebase db is available (means it's configured)
+        if (firebaseModule.db) {
+          setUseFirebase(true);
+          console.log("✅ Firebase detected, using cloud storage");
         } else {
-          // New format, use directly but ensure startTime and duration exist
-          migratedData[key] = tasks.map((task) => ({
-            ...task,
-            startTime:
-              task.startTime !== undefined
-                ? task.startTime
-                : (task.hour || 0) * 60,
-            duration: task.duration || 60,
-          }));
+          console.log("⚠️ Firebase not configured, using localStorage");
+          setUseFirebase(false);
         }
-      });
+      } catch (error) {
+        console.log("⚠️ Firebase not configured, using localStorage");
+        setUseFirebase(false);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-      setScheduledTasks(migratedData);
-      // Save migrated data
-      localStorage.setItem("scheduledTasks", JSON.stringify(migratedData));
-    }
+    checkFirebase();
   }, []);
 
-  // Save data to localStorage
+  // Load data from Firebase or localStorage
   useEffect(() => {
-    localStorage.setItem("draftTasks", JSON.stringify(draftTasks));
-  }, [draftTasks]);
+    if (isLoading) return;
+
+    const loadData = async () => {
+      if (useFirebase) {
+        try {
+          // Load from Firebase
+          const drafts = await loadDraftTasks();
+          const scheduled = await loadScheduledTasks();
+          setDraftTasks(drafts);
+          setScheduledTasks(scheduled);
+
+          // Set up real-time listeners
+          const unsubscribeDrafts = subscribeToDraftTasks((tasks) => {
+            setDraftTasks(tasks);
+          });
+          const unsubscribeScheduled = subscribeToScheduledTasks((tasks) => {
+            setScheduledTasks(tasks);
+          });
+
+          return () => {
+            unsubscribeDrafts();
+            unsubscribeScheduled();
+          };
+        } catch (error) {
+          console.error(
+            "Failed to load from Firebase, falling back to localStorage:",
+            error
+          );
+          // Fallback to localStorage
+          loadFromLocalStorage();
+        }
+      } else {
+        loadFromLocalStorage();
+      }
+    };
+
+    const loadFromLocalStorage = () => {
+      try {
+        const savedDrafts = localStorage.getItem("draftTasks");
+        const savedScheduled = localStorage.getItem("scheduledTasks");
+
+        if (savedDrafts) {
+          const parsed = JSON.parse(savedDrafts);
+          if (Array.isArray(parsed)) {
+            setDraftTasks(parsed);
+          }
+        }
+        if (savedScheduled) {
+          const data = JSON.parse(savedScheduled);
+
+          // Data migration: Convert old format { date-hour: [tasks] } to new format { date: [tasks] }
+          const migratedData = {};
+
+          Object.keys(data).forEach((key) => {
+            const tasks = data[key];
+
+            // Check if it's old format (contains - and last part is a number)
+            if (key.includes("-")) {
+              const parts = key.split("-");
+              const lastPart = parts[parts.length - 1];
+
+              if (
+                !isNaN(parseInt(lastPart)) &&
+                parseInt(lastPart) >= 0 &&
+                parseInt(lastPart) < 24
+              ) {
+                // This is old format: date-hour
+                const hour = parseInt(lastPart);
+                const date = parts.slice(0, -1).join("-");
+
+                if (!migratedData[date]) {
+                  migratedData[date] = [];
+                }
+
+                // Migrate tasks, add startTime and duration
+                tasks.forEach((task) => {
+                  migratedData[date].push({
+                    ...task,
+                    startTime:
+                      (task.hour !== undefined ? task.hour : hour) * 60,
+                    duration: task.duration || 60,
+                  });
+                });
+              } else {
+                // New format or unrecognized format, use directly
+                migratedData[key] = tasks.map((task) => ({
+                  ...task,
+                  startTime:
+                    task.startTime !== undefined
+                      ? task.startTime
+                      : (task.hour || 0) * 60,
+                  duration: task.duration || 60,
+                }));
+              }
+            } else {
+              // New format, use directly but ensure startTime and duration exist
+              migratedData[key] = tasks.map((task) => ({
+                ...task,
+                startTime:
+                  task.startTime !== undefined
+                    ? task.startTime
+                    : (task.hour || 0) * 60,
+                duration: task.duration || 60,
+              }));
+            }
+          });
+
+          setScheduledTasks(migratedData);
+          // Save migrated data
+          try {
+            localStorage.setItem(
+              "scheduledTasks",
+              JSON.stringify(migratedData)
+            );
+          } catch (error) {
+            console.error("Failed to save migrated data:", error);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load data from localStorage:", error);
+      }
+    };
+
+    loadData();
+  }, [isLoading, useFirebase]);
+
+  // Save data to Firebase or localStorage
+  useEffect(() => {
+    if (isLoading) return;
+
+    // Skip saving on initial load
+    if (
+      draftTasks.length === 0 &&
+      !localStorage.getItem("draftTasks") &&
+      !useFirebase
+    ) {
+      return;
+    }
+
+    const saveData = async () => {
+      if (useFirebase) {
+        try {
+          await saveDraftTasks(draftTasks);
+        } catch (error) {
+          console.error(
+            "Failed to save to Firebase, falling back to localStorage:",
+            error
+          );
+          // Fallback to localStorage
+          try {
+            localStorage.setItem("draftTasks", JSON.stringify(draftTasks));
+          } catch (localError) {
+            console.error("Failed to save to localStorage:", localError);
+          }
+        }
+      } else {
+        try {
+          localStorage.setItem("draftTasks", JSON.stringify(draftTasks));
+          console.log(
+            "✅ Draft tasks saved to localStorage:",
+            draftTasks.length,
+            "tasks"
+          );
+        } catch (error) {
+          console.error("❌ Failed to save draft tasks:", error);
+          if (error.name === "QuotaExceededError") {
+            alert("Storage quota exceeded. Please clear some browser data.");
+          }
+        }
+      }
+    };
+
+    saveData();
+  }, [draftTasks, isLoading, useFirebase]);
 
   useEffect(() => {
-    localStorage.setItem("scheduledTasks", JSON.stringify(scheduledTasks));
-  }, [scheduledTasks]);
+    if (isLoading) return;
+
+    // Skip saving on initial load
+    if (
+      Object.keys(scheduledTasks).length === 0 &&
+      !localStorage.getItem("scheduledTasks") &&
+      !useFirebase
+    ) {
+      return;
+    }
+
+    const saveData = async () => {
+      if (useFirebase) {
+        try {
+          await saveScheduledTasks(scheduledTasks);
+        } catch (error) {
+          console.error(
+            "Failed to save to Firebase, falling back to localStorage:",
+            error
+          );
+          // Fallback to localStorage
+          try {
+            localStorage.setItem(
+              "scheduledTasks",
+              JSON.stringify(scheduledTasks)
+            );
+          } catch (localError) {
+            console.error("Failed to save to localStorage:", localError);
+          }
+        }
+      } else {
+        try {
+          localStorage.setItem(
+            "scheduledTasks",
+            JSON.stringify(scheduledTasks)
+          );
+          const taskCount = Object.values(scheduledTasks).reduce(
+            (sum, tasks) => sum + tasks.length,
+            0
+          );
+          console.log(
+            "✅ Scheduled tasks saved to localStorage:",
+            taskCount,
+            "tasks across",
+            Object.keys(scheduledTasks).length,
+            "days"
+          );
+        } catch (error) {
+          console.error("❌ Failed to save scheduled tasks:", error);
+          if (error.name === "QuotaExceededError") {
+            alert("Storage quota exceeded. Please clear some browser data.");
+          }
+        }
+      }
+    };
+
+    saveData();
+  }, [scheduledTasks, isLoading, useFirebase]);
 
   const addDraftTask = (text, type = "other", id = null) => {
     const newTask = {

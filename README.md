@@ -51,6 +51,35 @@ The built files will be in the `dist` directory.
 npm run preview
 ```
 
+## 🌐 Free Deployment
+
+### Deploy to Vercel (Recommended - Easiest)
+
+1. **Push your code to GitHub** (if not already done)
+2. **Go to [vercel.com](https://vercel.com)** and sign up/login with GitHub
+3. **Click "New Project"** and import your repository
+4. **Vercel will auto-detect Vite** - just click "Deploy"
+5. **Done!** Your site will be live in seconds
+
+Your site will be available at: `https://your-project-name.vercel.app`
+
+**Features:**
+
+- ✅ Free forever
+- ✅ Automatic HTTPS
+- ✅ Custom domain support
+- ✅ **Auto-deploy on every git push** - Just push to GitHub and Vercel updates automatically!
+- ✅ Preview deployments for Pull Requests
+
+### Other Deployment Options
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for:
+
+- Netlify deployment
+- GitHub Pages
+- Firebase setup for cloud storage
+- Data persistence solutions
+
 ## 📖 Usage Instructions
 
 1. **Add Tasks**: Enter task content in the left draft panel, select task type, and click the `+` button or press Enter to add
