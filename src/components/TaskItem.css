@@ -1,0 +1,123 @@
+.task-item {
+  background: white;
+  border-left: 4px solid;
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: default;
+  position: relative;
+  overflow: hidden;
+}
+
+.task-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 0.3s ease, width 0.3s ease;
+  background: inherit;
+}
+
+.task-item.draggable {
+  /* 拖拽光标现在在 task-content 上 */
+}
+
+.task-item:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+.task-item:hover::before {
+  opacity: 0.3;
+  width: 6px;
+}
+
+.task-content {
+  flex: 1;
+  cursor: grab;
+}
+
+.task-content:active {
+  cursor: grabbing;
+}
+
+.task-text {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-color);
+  word-break: break-word;
+  letter-spacing: -0.2px;
+}
+
+.task-actions {
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.task-item:hover .task-actions {
+  opacity: 1;
+}
+
+.task-action-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--light-bg);
+  color: var(--text-color);
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  position: relative;
+  overflow: hidden;
+}
+
+.task-action-btn::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 182, 193, 0.2);
+  transform: translate(-50%, -50%);
+  transition: width 0.4s, height 0.4s;
+}
+
+.task-action-btn:hover::before {
+  width: 40px;
+  height: 40px;
+}
+
+.task-action-btn:hover {
+  background: linear-gradient(135deg, var(--secondary-color), rgba(255, 182, 193, 0.3));
+  transform: scale(1.15) rotate(5deg);
+  box-shadow: 0 4px 12px rgba(255, 182, 193, 0.3);
+}
+
+.task-action-btn.edit:hover {
+  background: linear-gradient(135deg, rgba(255, 182, 193, 0.4), rgba(255, 182, 193, 0.2));
+  color: var(--primary-color);
+  transform: scale(1.15) rotate(5deg);
+  box-shadow: 0 4px 12px rgba(255, 182, 193, 0.3);
+}
+
+.task-action-btn.delete:hover {
+  background: linear-gradient(135deg, #ffcccc, #ffaaaa);
+  color: #ff4444;
+  transform: scale(1.15) rotate(-5deg);
+  box-shadow: 0 4px 12px rgba(255, 68, 68, 0.25);
+}

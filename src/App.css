@@ -1,0 +1,60 @@
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-content {
+  display: flex;
+  flex: 1;
+  gap: 20px;
+  padding: 20px;
+  max-width: 1600px;
+  margin: 0 auto;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+.schedule-view {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: 0 8px 32px rgba(255, 182, 193, 0.2);
+  overflow-y: auto;
+  max-height: calc(100vh - 140px);
+  border: 1px solid rgba(255, 182, 193, 0.15);
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.schedule-view::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary-color), var(--accent-color), var(--primary-color));
+  background-size: 200% 100%;
+  animation: shimmer 3s linear infinite;
+  border-radius: 24px 24px 0 0;
+}
+
+.schedule-view:hover {
+  box-shadow: 0 12px 40px rgba(255, 182, 193, 0.3);
+  transform: translateY(-2px);
+}
+
+@media (max-width: 1024px) {
+  .app-content {
+    flex-direction: column;
+  }
+  
+  .schedule-view {
+    max-height: none;
+  }
+}

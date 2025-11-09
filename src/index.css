@@ -1,0 +1,46 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --primary-color: #FFB6C1;
+  --secondary-color: #FFE4E1;
+  --accent-color: #FF69B4;
+  --text-color: #4A4A4A;
+  --light-bg: #FFF8F8;
+  --border-color: #FFD7D7;
+  --shadow: rgba(255, 182, 193, 0.2);
+  
+  /* 任务类型颜色 */
+  --work-color: #FFB6C1;
+  --study-color: #B6E5D8;
+  --exercise-color: #FFD89B;
+  --rest-color: #D4A5F9;
+  --other-color: #A8D8EA;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  background: linear-gradient(135deg, #FFF8F8 0%, #FFE4E1 100%);
+  color: var(--text-color);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+input, textarea {
+  font-family: inherit;
+  outline: none;
+}

@@ -1,0 +1,91 @@
+.week-view {
+  display: flex;
+  flex-direction: column;
+}
+
+.week-header {
+  display: grid;
+  grid-template-columns: 80px repeat(7, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.week-day-header {
+  text-align: center;
+  padding: 8px;
+}
+
+.day-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-color);
+  margin-bottom: 4px;
+}
+
+.day-date {
+  font-size: 12px;
+  color: #999;
+}
+
+.week-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.week-hour-row {
+  display: grid;
+  grid-template-columns: 80px repeat(7, 1fr);
+  gap: 8px;
+  min-height: 60px;
+}
+
+.hour-label {
+  font-size: 12px;
+  color: #999;
+  display: flex;
+  align-items: center;
+  padding: 8px;
+}
+
+.week-time-slot {
+  min-height: 50px;
+  padding: 4px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: all 0.3s ease;
+}
+
+.week-time-slot:hover {
+  background: var(--light-bg);
+}
+
+.week-time-slot.drag-over {
+  background: var(--secondary-color);
+  border: 2px dashed var(--primary-color);
+}
+
+.drop-hint-small {
+  padding: 8px;
+  text-align: center;
+  color: var(--accent-color);
+  font-size: 12px;
+  border: 2px dashed var(--primary-color);
+  border-radius: 6px;
+  background: rgba(255, 182, 193, 0.1);
+}
+
+@media (max-width: 1200px) {
+  .week-header,
+  .week-hour-row {
+    grid-template-columns: 60px repeat(7, 1fr);
+  }
+
+  .hour-label {
+    font-size: 10px;
+  }
+}

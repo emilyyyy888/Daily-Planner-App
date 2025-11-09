@@ -1,0 +1,139 @@
+.month-view {
+  display: flex;
+  flex-direction: column;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.month-day-header {
+  text-align: center;
+  padding: 12px;
+  font-weight: 600;
+  color: var(--text-color);
+  font-size: 14px;
+}
+
+.month-day-cell {
+  min-height: 120px;
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  padding: 8px;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s ease;
+}
+
+.month-day-cell:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 2px 8px var(--shadow);
+}
+
+.month-day-cell.other-month {
+  opacity: 0.4;
+  background: var(--light-bg);
+}
+
+.month-day-cell.today {
+  border-color: var(--accent-color);
+  background: rgba(255, 182, 193, 0.05);
+}
+
+.month-day-cell.today .day-number {
+  background: var(--accent-color);
+  color: white;
+}
+
+.month-day-cell.drag-over {
+  border-color: var(--primary-color);
+  background: var(--secondary-color);
+  border-style: dashed;
+}
+
+.day-number {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-color);
+  margin-bottom: 8px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.month-day-cell:hover .day-number {
+  background: var(--light-bg);
+}
+
+.day-tasks {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.month-task-item {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: white;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.month-task-item:hover {
+  transform: translateX(4px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.month-task-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.more-tasks {
+  font-size: 10px;
+  color: #999;
+  padding: 4px;
+  text-align: center;
+}
+
+.drop-hint-month {
+  padding: 8px;
+  text-align: center;
+  color: var(--accent-color);
+  font-size: 11px;
+  border: 2px dashed var(--primary-color);
+  border-radius: 6px;
+  background: rgba(255, 182, 193, 0.1);
+}
+
+@media (max-width: 768px) {
+  .month-day-cell {
+    min-height: 80px;
+    padding: 6px;
+  }
+  
+  .day-number {
+    font-size: 14px;
+    width: 24px;
+    height: 24px;
+  }
+  
+  .month-task-item {
+    font-size: 10px;
+    padding: 3px 6px;
+  }
+}
