@@ -54,7 +54,12 @@
 }
 
 .time-slot:hover {
-  background: rgba(255, 182, 193, 0.05);
+  background: rgba(255, 182, 193, 0.1);
+  cursor: pointer;
+}
+
+.time-slot:active {
+  background: rgba(255, 182, 193, 0.15);
 }
 
 .time-slot.drag-over {

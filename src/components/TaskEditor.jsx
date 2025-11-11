@@ -7,6 +7,7 @@ const DURATION_OPTIONS = [
   { label: "30 min", value: 30 },
   { label: "45 min", value: 45 },
   { label: "1 hour", value: 60 },
+  { label: "1h 20min", value: 80 },
   { label: "1.5 hours", value: 90 },
   { label: "2 hours", value: 120 },
   { label: "3 hours", value: 180 },
@@ -57,6 +58,7 @@ function TaskEditor({
     setDurationHours(Math.floor(newDefaultDuration / 60));
     setDurationMinutes(newDefaultDuration % 60);
     setSelectedType(task.type || "other");
+    // Use a combination of id (or undefined) and startTime as key to handle new tasks
   }, [task.id, task.startTime, task.duration, task.text, task.type]);
 
   useEffect(() => {

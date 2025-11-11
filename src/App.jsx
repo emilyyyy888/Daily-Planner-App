@@ -1074,6 +1074,27 @@ function App() {
     }));
   };
 
+  // Add a new task directly to the schedule (from timeline click)
+  const addNewTaskToSchedule = (taskData, date) => {
+    const dateKey = format(date, "yyyy-MM-dd");
+    const startTime = taskData.startTime !== undefined ? taskData.startTime : 0;
+    const duration = taskData.duration || 60;
+
+    const newTask = {
+      ...taskData,
+      id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      date: dateKey,
+      startTime: startTime,
+      duration: duration,
+      source: "day-draft", // Mark as from day draft
+    };
+
+    setScheduledTasks((prev) => ({
+      ...prev,
+      [dateKey]: [...(prev[dateKey] || []), newTask],
+    }));
+  };
+
   const moveTaskToDraft = (task) => {
     const { date, startTime, duration, ...taskWithoutSchedule } = task;
     const newTask = {
@@ -1133,6 +1154,7 @@ function App() {
                 onMoveToDraft={moveTaskToDraft}
                 onToggleComplete={toggleTaskComplete}
                 onResizeTask={handleResizeTask}
+                onAddTask={addNewTaskToSchedule}
                 taskTypes={TASK_TYPES}
               />
             )}

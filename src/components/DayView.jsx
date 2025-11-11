@@ -14,6 +14,7 @@ function DayView({
   onMoveToDraft,
   onToggleComplete,
   onResizeTask,
+  onAddTask,
   taskTypes,
 }) {
   const [editingTask, setEditingTask] = useState(null);
@@ -54,8 +55,39 @@ function DayView({
 
   const handleSaveTask = (updates) => {
     if (editingTask) {
-      onUpdateTask(dateKey, editingTask.id, updates);
+      // If task has no id, it's a new task - create it
+      if (!editingTask.id) {
+        if (onAddTask) {
+          onAddTask(updates, date);
+        }
+      } else {
+        // Update existing task
+        onUpdateTask(dateKey, editingTask.id, updates);
+      }
     }
+  };
+
+  // Handle clicking on empty time slot to create new task
+  const handleTimeSlotClick = (hour) => {
+    // Convert hour to minutes (0-23 hour format, need to handle 7 AM start)
+    let startMinutes = hour * 60;
+    // If hour is 0-6, it means it's the next day (displayed at bottom)
+    if (hour < START_HOUR) {
+      startMinutes = (hour + 24) * 60;
+    } else {
+      startMinutes = hour * 60;
+    }
+
+    // Create a new task object with default values
+    const newTask = {
+      text: "",
+      startTime: startMinutes,
+      duration: 60, // Default 1 hour
+      type: taskTypes[0]?.id || "other",
+      // No id means it's a new task
+    };
+
+    setEditingTask(newTask);
   };
 
   // Wrapper for onResizeTask that also updates editingTask if it's being edited
@@ -114,6 +146,8 @@ function DayView({
                 onDeleteTask={onDeleteTask}
                 onMoveToDraft={onMoveToDraft}
                 taskTypes={taskTypes}
+                onClick={handleTimeSlotClick}
+                START_HOUR={START_HOUR}
               />
             );
           })}
@@ -617,14 +651,42 @@ function DraggableScheduledTask({
   );
 }
 
-function TimeSlot({ hour, dateKey, onDeleteTask, onMoveToDraft, taskTypes }) {
+function TimeSlot({
+  hour,
+  dateKey,
+  onDeleteTask,
+  onMoveToDraft,
+  taskTypes,
+  onClick,
+  START_HOUR,
+}) {
   const taskKey = `${dateKey}-${hour}`;
   const { setNodeRef, isOver } = useDroppable({
     id: `time-slot-${taskKey}`,
   });
 
+  const handleClick = (e) => {
+    // Don't trigger if clicking on a task or drop hint
+    if (
+      e.target.closest(".scheduled-task-block") ||
+      e.target.closest(".drop-hint")
+    ) {
+      return;
+    }
+    // Stop propagation to prevent triggering other events
+    e.stopPropagation();
+    if (onClick) {
+      onClick(hour);
+    }
+  };
+
   return (
-    <div ref={setNodeRef} className={`time-slot ${isOver ? "drag-over" : ""}`}>
+    <div
+      ref={setNodeRef}
+      className={`time-slot ${isOver ? "drag-over" : ""}`}
+      onClick={handleClick}
+      style={{ cursor: "pointer" }}
+    >
       {isOver && <div className="drop-hint">Release to add task</div>}
     </div>
   );
