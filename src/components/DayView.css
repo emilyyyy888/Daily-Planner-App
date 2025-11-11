@@ -27,7 +27,7 @@
   font-size: 14px;
   font-weight: 500;
   color: var(--text-color);
-  height: 60px;
+  height: 80px;
   display: flex;
   align-items: flex-start;
   padding-top: 4px;
@@ -36,14 +36,14 @@
 .time-axis {
   flex: 1;
   position: relative;
-  min-height: calc(60px * 24);
+  min-height: calc(80px * 24);
   background: var(--light-bg);
   border-radius: 12px;
   overflow: hidden;
 }
 
 .time-slot {
-  height: 60px;
+  height: 80px;
   border-bottom: 1px solid rgba(255, 182, 193, 0.15);
   transition: all 0.3s ease;
   position: relative;
@@ -97,7 +97,7 @@
   pointer-events: auto;
   cursor: pointer;
   transition: all 0.3s ease;
-  overflow: hidden;
+  overflow: visible;
   min-height: 30px;
   display: flex;
   justify-content: space-between;
@@ -170,4 +170,56 @@
 .task-block-time {
   font-size: 11px;
   color: #999;
+}
+
+/* Completed task styles */
+.scheduled-task-block.completed {
+  opacity: 0.6;
+}
+
+.scheduled-task-block.completed .completed-text {
+  text-decoration: line-through;
+  color: #999;
+}
+
+/* Checkbox styles */
+.task-block-checkbox-container {
+  padding: 8px 4px 8px 8px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.task-block-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary-color);
+}
+
+/* Resize handle styles */
+.task-resize-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 16px;
+  cursor: ns-resize;
+  z-index: 30;
+  pointer-events: auto;
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.task-resize-handle:hover {
+  background: rgba(255, 182, 193, 0.4);
+  border-top: 2px solid rgba(255, 182, 193, 0.6);
+  border-bottom: 2px solid rgba(255, 182, 193, 0.6);
+}
+
+.task-resize-handle-top {
+  top: -8px;
+}
+
+.task-resize-handle-bottom {
+  bottom: -8px;
 }

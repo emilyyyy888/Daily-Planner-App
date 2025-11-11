@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   DndContext,
   closestCenter,
@@ -16,19 +16,27 @@ import DayView from "./components/DayView";
 import WeekView from "./components/WeekView";
 import MonthView from "./components/MonthView";
 import {
-  loadDraftTasks,
-  loadScheduledTasks,
-  saveDraftTasks,
-  saveScheduledTasks,
-  subscribeToDraftTasks,
-  subscribeToScheduledTasks,
+  loadDraftTasks as loadDraftTasksSupabase,
+  loadScheduledTasks as loadScheduledTasksSupabase,
+  saveDraftTasks as saveDraftTasksSupabase,
+  saveScheduledTasks as saveScheduledTasksSupabase,
+  subscribeToDraftTasks as subscribeToDraftTasksSupabase,
+  subscribeToScheduledTasks as subscribeToScheduledTasksSupabase,
+} from "./utils/supabaseStorage";
+import {
+  loadDraftTasks as loadDraftTasksFirebase,
+  loadScheduledTasks as loadScheduledTasksFirebase,
+  saveDraftTasks as saveDraftTasksFirebase,
+  saveScheduledTasks as saveScheduledTasksFirebase,
+  subscribeToDraftTasks as subscribeToDraftTasksFirebase,
+  subscribeToScheduledTasks as subscribeToScheduledTasksFirebase,
 } from "./utils/firebaseStorage";
 import "./App.css";
 
 const TASK_TYPES = [
   { id: "work", name: "Work", color: "var(--work-color)" },
   { id: "study", name: "Study", color: "var(--study-color)" },
-  { id: "exercise", name: "Exercise", color: "var(--exercise-color)" },
+  { id: "class", name: "Class", color: "var(--class-color)" },
   { id: "rest", name: "Rest", color: "var(--rest-color)" },
   { id: "other", name: "Other", color: "var(--other-color)" },
 ];
@@ -36,63 +44,212 @@ const TASK_TYPES = [
 function App() {
   const [view, setView] = useState("day"); // 'day', 'week', 'month'
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [draftTasks, setDraftTasks] = useState([]);
+  const [dayDraftTasks, setDayDraftTasks] = useState({}); // { date: [tasks] } - organized by date
+  const [weekDraftTasks, setWeekDraftTasks] = useState([]);
+  const [monthDraftTasks, setMonthDraftTasks] = useState([]);
   const [scheduledTasks, setScheduledTasks] = useState({}); // { date: [tasks] } Each task contains startTime(minutes) and duration(minutes)
-  const [useFirebase, setUseFirebase] = useState(false); // Toggle between Firebase and localStorage
+  const [storageType, setStorageType] = useState("localStorage"); // 'supabase', 'firebase', or 'localStorage'
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true); // Track if this is the first load
+  const isSavingRef = useRef(false); // Track if we're currently saving to prevent listener overwrites
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Require 8px movement before drag activates
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
 
-  // Check if Firebase is configured
+  // Check which storage backend is available (priority: Supabase > Firebase > localStorage)
   useEffect(() => {
-    const checkFirebase = async () => {
+    const checkStorage = async () => {
       try {
-        const firebaseModule = await import("./firebase");
-        // Check if firebase db is available (means it's configured)
-        if (firebaseModule.db) {
-          setUseFirebase(true);
-          console.log("✅ Firebase detected, using cloud storage");
-        } else {
-          console.log("⚠️ Firebase not configured, using localStorage");
-          setUseFirebase(false);
+        // Check Supabase first (best option)
+        const supabaseModule = await import("./utils/supabaseStorage");
+        if (
+          supabaseModule.isSupabaseConfigured &&
+          supabaseModule.isSupabaseConfigured()
+        ) {
+          setStorageType("supabase");
+          console.log("✅ Supabase detected, using PostgreSQL cloud storage");
+          setIsLoading(false);
+          return;
         }
       } catch (error) {
-        console.log("⚠️ Firebase not configured, using localStorage");
-        setUseFirebase(false);
-      } finally {
-        setIsLoading(false);
+        // Supabase not available, continue checking
       }
+
+      try {
+        // Check Firebase as fallback
+        const firebaseModule = await import("./firebase");
+        if (firebaseModule.db) {
+          setStorageType("firebase");
+          console.log("✅ Firebase detected, using cloud storage");
+          setIsLoading(false);
+          return;
+        }
+      } catch (error) {
+        // Firebase not available, continue
+      }
+
+      // Default to localStorage
+      console.log("⚠️ No cloud storage configured, using localStorage");
+      setStorageType("localStorage");
+      setIsLoading(false);
     };
 
-    checkFirebase();
+    checkStorage();
   }, []);
 
-  // Load data from Firebase or localStorage
+  // Load data from Supabase, Firebase, or localStorage
   useEffect(() => {
     if (isLoading) return;
 
     const loadData = async () => {
-      if (useFirebase) {
+      if (storageType === "supabase") {
         try {
-          // Load from Firebase
-          const drafts = await loadDraftTasks();
-          const scheduled = await loadScheduledTasks();
-          setDraftTasks(drafts);
+          // Load from Supabase
+          const drafts = await loadDraftTasksSupabase();
+          const scheduled = await loadScheduledTasksSupabase();
+
+          // Handle new format with separate draft types
+          if (drafts && typeof drafts === "object" && drafts !== null) {
+            if (drafts.dayDraftTasks) {
+              setDayDraftTasks(drafts.dayDraftTasks || {});
+              setWeekDraftTasks(drafts.weekDraftTasks || []);
+              setMonthDraftTasks(drafts.monthDraftTasks || []);
+            } else if (Array.isArray(drafts)) {
+              // Migrate old array format to new object format
+              const today = format(new Date(), "yyyy-MM-dd");
+              setDayDraftTasks({ [today]: drafts });
+              setWeekDraftTasks([]);
+              setMonthDraftTasks([]);
+            } else {
+              // Assume it's old format dayDraftTasks object
+              setDayDraftTasks(drafts);
+              setWeekDraftTasks([]);
+              setMonthDraftTasks([]);
+            }
+          } else {
+            setDayDraftTasks({});
+            setWeekDraftTasks([]);
+            setMonthDraftTasks([]);
+          }
           setScheduledTasks(scheduled);
 
           // Set up real-time listeners
-          const unsubscribeDrafts = subscribeToDraftTasks((tasks) => {
-            setDraftTasks(tasks);
+          const unsubscribeDrafts = subscribeToDraftTasksSupabase((tasks) => {
+            if (!isSavingRef.current) {
+              console.log("📥 Draft tasks updated from Supabase");
+              // Handle new format with separate draft types
+              if (tasks && typeof tasks === "object" && tasks !== null) {
+                if (tasks.dayDraftTasks) {
+                  setDayDraftTasks(tasks.dayDraftTasks || {});
+                  setWeekDraftTasks(tasks.weekDraftTasks || []);
+                  setMonthDraftTasks(tasks.monthDraftTasks || []);
+                } else if (Array.isArray(tasks)) {
+                  // Migrate old array format
+                  const today = format(new Date(), "yyyy-MM-dd");
+                  setDayDraftTasks({ [today]: tasks });
+                  setWeekDraftTasks([]);
+                  setMonthDraftTasks([]);
+                } else {
+                  // Assume it's old format dayDraftTasks object
+                  setDayDraftTasks(tasks);
+                  setWeekDraftTasks([]);
+                  setMonthDraftTasks([]);
+                }
+              } else {
+                setDayDraftTasks({});
+                setWeekDraftTasks([]);
+                setMonthDraftTasks([]);
+              }
+            } else {
+              console.log(
+                "⏸️ Ignoring Supabase draft update (local save in progress)"
+              );
+            }
           });
-          const unsubscribeScheduled = subscribeToScheduledTasks((tasks) => {
-            setScheduledTasks(tasks);
+          const unsubscribeScheduled = subscribeToScheduledTasksSupabase(
+            (tasks) => {
+              if (!isSavingRef.current) {
+                console.log("📥 Scheduled tasks updated from Supabase");
+                setScheduledTasks(tasks);
+              } else {
+                console.log(
+                  "⏸️ Ignoring Supabase scheduled update (local save in progress)"
+                );
+              }
+            }
+          );
+
+          setIsInitialLoad(false);
+          return () => {
+            unsubscribeDrafts();
+            unsubscribeScheduled();
+          };
+        } catch (error) {
+          console.error(
+            "Failed to load from Supabase, falling back to localStorage:",
+            error
+          );
+          loadFromLocalStorage();
+        }
+      } else if (storageType === "firebase") {
+        try {
+          // Load from Firebase
+          const drafts = await loadDraftTasksFirebase();
+          const scheduled = await loadScheduledTasksFirebase();
+          // Migrate old array format to new object format
+          if (Array.isArray(drafts)) {
+            const today = format(new Date(), "yyyy-MM-dd");
+            setDayDraftTasks({ [today]: drafts });
+          } else if (typeof drafts === "object" && drafts !== null) {
+            setDayDraftTasks(drafts);
+          } else {
+            setDayDraftTasks({});
+          }
+          setScheduledTasks(scheduled);
+
+          // Set up real-time listeners
+          const unsubscribeDrafts = subscribeToDraftTasksFirebase((tasks) => {
+            if (!isSavingRef.current) {
+              console.log(
+                "📥 Draft tasks updated from Firebase:",
+                tasks.length,
+                "tasks"
+              );
+              // Migrate old array format to new object format
+              if (Array.isArray(tasks)) {
+                const today = format(new Date(), "yyyy-MM-dd");
+                setDayDraftTasks({ [today]: tasks });
+              } else if (typeof tasks === "object" && tasks !== null) {
+                setDayDraftTasks(tasks);
+              } else {
+                setDayDraftTasks({});
+              }
+            } else {
+              console.log(
+                "⏸️ Ignoring Firebase draft update (local save in progress)"
+              );
+            }
           });
+          const unsubscribeScheduled = subscribeToScheduledTasksFirebase(
+            (tasks) => {
+              if (!isSavingRef.current) {
+                console.log("📥 Scheduled tasks updated from Firebase");
+                setScheduledTasks(tasks);
+              } else {
+                console.log(
+                  "⏸️ Ignoring Firebase scheduled update (local save in progress)"
+                );
+              }
+            }
+          );
 
           setIsInitialLoad(false);
           return () => {
@@ -104,7 +261,6 @@ function App() {
             "Failed to load from Firebase, falling back to localStorage:",
             error
           );
-          // Fallback to localStorage
           loadFromLocalStorage();
         }
       } else {
@@ -114,27 +270,73 @@ function App() {
 
     const loadFromLocalStorage = () => {
       try {
-        const savedDrafts = localStorage.getItem("draftTasks");
+        // Load separate draft types
+        const savedDayDrafts = localStorage.getItem("dayDraftTasks");
+        const savedWeekDrafts = localStorage.getItem("weekDraftTasks");
+        const savedMonthDrafts = localStorage.getItem("monthDraftTasks");
+        const savedDrafts = localStorage.getItem("draftTasks"); // Legacy support
         const savedScheduled = localStorage.getItem("scheduledTasks");
 
-        if (savedDrafts) {
+        // Load day drafts
+        if (savedDayDrafts) {
+          const parsed = JSON.parse(savedDayDrafts);
+          if (Array.isArray(parsed)) {
+            // Migrate old array format to new object format
+            const today = format(new Date(), "yyyy-MM-dd");
+            const migrated = { [today]: parsed };
+            setDayDraftTasks(migrated);
+            console.log(
+              "✅ Migrated day draft tasks to date-organized format:",
+              parsed.length,
+              "tasks"
+            );
+            localStorage.setItem("dayDraftTasks", JSON.stringify(migrated));
+          } else if (typeof parsed === "object" && parsed !== null) {
+            setDayDraftTasks(parsed);
+            const totalTasks = Object.values(parsed).reduce(
+              (sum, tasks) => sum + (Array.isArray(tasks) ? tasks.length : 0),
+              0
+            );
+            console.log(
+              "✅ Loaded day draft tasks:",
+              totalTasks,
+              "tasks across",
+              Object.keys(parsed).length,
+              "days"
+            );
+          }
+        } else if (savedDrafts) {
+          // Migrate old format: all drafts become day drafts for today
           const parsed = JSON.parse(savedDrafts);
           if (Array.isArray(parsed)) {
-            setDraftTasks(parsed);
-            if (parsed.length > 0) {
-              console.log(
-                "✅ Loaded draft tasks from localStorage:",
-                parsed.length,
-                "tasks"
-              );
-            } else {
-              console.log(
-                "✅ Loaded draft tasks from localStorage: 0 tasks (empty)"
-              );
-            }
+            const today = format(new Date(), "yyyy-MM-dd");
+            const migrated = { [today]: parsed };
+            setDayDraftTasks(migrated);
+            console.log(
+              "✅ Migrated draft tasks to day drafts:",
+              parsed.length,
+              "tasks"
+            );
+            localStorage.setItem("dayDraftTasks", JSON.stringify(migrated));
           }
-        } else {
-          console.log("No draft tasks found in localStorage");
+        }
+
+        // Load week drafts
+        if (savedWeekDrafts) {
+          const parsed = JSON.parse(savedWeekDrafts);
+          if (Array.isArray(parsed)) {
+            setWeekDraftTasks(parsed);
+            console.log("✅ Loaded week draft tasks:", parsed.length, "tasks");
+          }
+        }
+
+        // Load month drafts
+        if (savedMonthDrafts) {
+          const parsed = JSON.parse(savedMonthDrafts);
+          if (Array.isArray(parsed)) {
+            setMonthDraftTasks(parsed);
+            console.log("✅ Loaded month draft tasks:", parsed.length, "tasks");
+          }
         }
         if (savedScheduled) {
           const data = JSON.parse(savedScheduled);
@@ -231,49 +433,111 @@ function App() {
     };
 
     loadData();
-  }, [isLoading, useFirebase]);
+  }, [isLoading, storageType]);
 
-  // Save data to Firebase or localStorage
+  // Save data to Supabase, Firebase, or localStorage
   useEffect(() => {
     if (isLoading || isInitialLoad) {
       // Don't save during initial load
       return;
     }
 
-    // Skip saving if empty and no existing data in localStorage
-    const existingDrafts = localStorage.getItem("draftTasks");
-    if (
-      draftTasks.length === 0 &&
-      (!existingDrafts || existingDrafts === "[]") &&
-      !useFirebase
-    ) {
-      // Don't save empty array if there's no existing data
-      return;
-    }
-
     const saveData = async () => {
-      if (useFirebase) {
+      // Combine all draft types into one object for cloud storage
+      const allDrafts = {
+        dayDraftTasks,
+        weekDraftTasks,
+        monthDraftTasks,
+      };
+
+      if (storageType === "supabase") {
         try {
-          await saveDraftTasks(draftTasks);
+          isSavingRef.current = true;
+          await saveDraftTasksSupabase(allDrafts);
+          setTimeout(() => {
+            isSavingRef.current = false;
+          }, 300);
         } catch (error) {
+          isSavingRef.current = false;
+          console.error(
+            "Failed to save to Supabase, falling back to localStorage:",
+            error
+          );
+          // Fallback to localStorage
+          try {
+            localStorage.setItem(
+              "dayDraftTasks",
+              JSON.stringify(dayDraftTasks)
+            );
+            localStorage.setItem(
+              "weekDraftTasks",
+              JSON.stringify(weekDraftTasks)
+            );
+            localStorage.setItem(
+              "monthDraftTasks",
+              JSON.stringify(monthDraftTasks)
+            );
+          } catch (localError) {
+            console.error("Failed to save to localStorage:", localError);
+          }
+        }
+      } else if (storageType === "firebase") {
+        try {
+          isSavingRef.current = true;
+          await saveDraftTasksFirebase(allDrafts);
+          setTimeout(() => {
+            isSavingRef.current = false;
+          }, 500);
+        } catch (error) {
+          isSavingRef.current = false;
           console.error(
             "Failed to save to Firebase, falling back to localStorage:",
             error
           );
           // Fallback to localStorage
           try {
-            localStorage.setItem("draftTasks", JSON.stringify(draftTasks));
+            localStorage.setItem(
+              "dayDraftTasks",
+              JSON.stringify(dayDraftTasks)
+            );
+            localStorage.setItem(
+              "weekDraftTasks",
+              JSON.stringify(weekDraftTasks)
+            );
+            localStorage.setItem(
+              "monthDraftTasks",
+              JSON.stringify(monthDraftTasks)
+            );
           } catch (localError) {
             console.error("Failed to save to localStorage:", localError);
           }
         }
       } else {
+        // Save all draft types to localStorage
         try {
-          localStorage.setItem("draftTasks", JSON.stringify(draftTasks));
+          localStorage.setItem("dayDraftTasks", JSON.stringify(dayDraftTasks));
+          localStorage.setItem(
+            "weekDraftTasks",
+            JSON.stringify(weekDraftTasks)
+          );
+          localStorage.setItem(
+            "monthDraftTasks",
+            JSON.stringify(monthDraftTasks)
+          );
+          const totalDayTasks = Object.values(dayDraftTasks).reduce(
+            (sum, tasks) => sum + (Array.isArray(tasks) ? tasks.length : 0),
+            0
+          );
           console.log(
-            "✅ Draft tasks saved to localStorage:",
-            draftTasks.length,
-            "tasks"
+            "✅ Draft tasks saved:",
+            totalDayTasks,
+            "day tasks across",
+            Object.keys(dayDraftTasks).length,
+            "days,",
+            weekDraftTasks.length,
+            "week,",
+            monthDraftTasks.length,
+            "month"
           );
         } catch (error) {
           console.error("❌ Failed to save draft tasks:", error);
@@ -285,7 +549,14 @@ function App() {
     };
 
     saveData();
-  }, [draftTasks, isLoading, useFirebase, isInitialLoad]);
+  }, [
+    dayDraftTasks,
+    weekDraftTasks,
+    monthDraftTasks,
+    isLoading,
+    storageType,
+    isInitialLoad,
+  ]);
 
   useEffect(() => {
     if (isLoading || isInitialLoad) {
@@ -311,15 +582,41 @@ function App() {
     }
 
     const saveData = async () => {
-      if (useFirebase) {
+      if (storageType === "supabase") {
         try {
-          await saveScheduledTasks(scheduledTasks);
+          isSavingRef.current = true;
+          await saveScheduledTasksSupabase(scheduledTasks);
+          setTimeout(() => {
+            isSavingRef.current = false;
+          }, 300);
         } catch (error) {
+          isSavingRef.current = false;
+          console.error(
+            "Failed to save to Supabase, falling back to localStorage:",
+            error
+          );
+          try {
+            localStorage.setItem(
+              "scheduledTasks",
+              JSON.stringify(scheduledTasks)
+            );
+          } catch (localError) {
+            console.error("Failed to save to localStorage:", localError);
+          }
+        }
+      } else if (storageType === "firebase") {
+        try {
+          isSavingRef.current = true;
+          await saveScheduledTasksFirebase(scheduledTasks);
+          setTimeout(() => {
+            isSavingRef.current = false;
+          }, 500);
+        } catch (error) {
+          isSavingRef.current = false;
           console.error(
             "Failed to save to Firebase, falling back to localStorage:",
             error
           );
-          // Fallback to localStorage
           try {
             localStorage.setItem(
               "scheduledTasks",
@@ -356,161 +653,33 @@ function App() {
     };
 
     saveData();
-  }, [scheduledTasks, isLoading, useFirebase, isInitialLoad]);
+  }, [scheduledTasks, isLoading, storageType, isInitialLoad]);
 
-  const addDraftTask = (text, type = "other", id = null) => {
-    const newTask = {
-      id: id || Date.now().toString(),
-      text,
-      type,
-      createdAt: new Date().toISOString(),
-    };
-    setDraftTasks([...draftTasks, newTask]);
-  };
-
-  const updateDraftTask = (id, updates) => {
-    // Draft tasks currently don't support time info, but keep interface for future expansion
-    setDraftTasks(
-      draftTasks.map((task) =>
-        task.id === id ? { ...task, ...updates } : task
-      )
-    );
-  };
-
-  const deleteDraftTask = (id) => {
-    setDraftTasks(draftTasks.filter((task) => task.id !== id));
-  };
-
-  const handleDragEnd = (event) => {
-    const { active, over } = event;
-
-    if (!over) return;
-
-    const activeId = active.id.toString();
-    const overId = over.id.toString();
-
-    // If dragging to time slot
-    if (overId.startsWith("time-slot-")) {
-      // overId format: time-slot-yyyy-MM-dd-hour
-      const parts = overId.replace("time-slot-", "").split("-");
-      const hour = parseInt(parts[parts.length - 1]); // Last part is the hour
-      const date = parts.slice(0, -1).join("-"); // Previous parts form the date
-
-      // Check if dragged from draft or from timeline
-      if (activeId.startsWith("scheduled-task-")) {
-        // Dragging from timeline to timeline - move scheduled task
-        // activeId format: scheduled-task-yyyy-MM-dd-taskId
-        const withoutPrefix = activeId.replace("scheduled-task-", "");
-        // Date format is yyyy-MM-dd (10 characters + 2 hyphens = 12 characters)
-        // Find the first possible date end position (after 10th character)
-        const oldDate = withoutPrefix.substring(0, 10); // yyyy-MM-dd
-        const taskId = withoutPrefix.substring(11); // Skip hyphen, get taskId
-
-        // Find task
-        const oldTasks = scheduledTasks[oldDate] || [];
-        const task = oldTasks.find((t) => t.id === taskId);
-
-        if (task) {
-          // If dragging to different date, need to move task
-          if (oldDate !== date) {
-            // Remove from old date
-            setScheduledTasks((prev) => ({
-              ...prev,
-              [oldDate]: prev[oldDate].filter((t) => t.id !== taskId),
-              [date]: [
-                ...(prev[date] || []),
-                { ...task, startTime: hour * 60 },
-              ],
-            }));
-          } else {
-            // Moving within same day, only update start time
-            setScheduledTasks((prev) => ({
-              ...prev,
-              [date]: prev[date].map((t) =>
-                t.id === taskId ? { ...t, startTime: hour * 60 } : t
-              ),
-            }));
-          }
-        }
-      } else {
-        // Dragging from draft to timeline
-        const task = draftTasks.find((t) => t.id === activeId);
-        if (task) {
-          setDraftTasks(draftTasks.filter((t) => t.id !== activeId));
-
-          // Add to schedule, use saved duration from draft task (if exists), otherwise default 1 hour
-          const newTask = {
-            ...task,
-            id: `${task.id}-${Date.now()}`,
-            date,
-            startTime: hour * 60, // Convert to minutes
-            duration: task.duration || 60, // Use saved duration, default 60 minutes
-          };
-
-          setScheduledTasks((prev) => ({
-            ...prev,
-            [date]: [...(prev[date] || []), newTask],
-          }));
-        }
-      }
+  // Helper function to get current draft tasks based on view
+  const getCurrentDraftTasks = () => {
+    if (view === "day") {
+      // For day view, return tasks for the current date
+      const dateKey = format(currentDate, "yyyy-MM-dd");
+      return dayDraftTasks[dateKey] || [];
     }
+    if (view === "week") return weekDraftTasks;
+    if (view === "month") return monthDraftTasks;
+    return [];
+  };
 
-    // If dragging to draft list
-    if (overId === "draft-list") {
-      // Check if dragged from timeline
-      if (activeId.startsWith("scheduled-task-")) {
-        // Dragging from timeline to draft
-        const withoutPrefix = activeId.replace("scheduled-task-", "");
-        const oldDate = withoutPrefix.substring(0, 10); // yyyy-MM-dd
-        const taskId = withoutPrefix.substring(11); // Skip hyphen, get taskId
-
-        // Find task
-        const oldTasks = scheduledTasks[oldDate] || [];
-        const task = oldTasks.find((t) => t.id === taskId);
-
-        if (task) {
-          // Remove from schedule
-          setScheduledTasks((prev) => ({
-            ...prev,
-            [oldDate]: prev[oldDate].filter((t) => t.id !== taskId),
-          }));
-
-          // Add to draft, remove time information
-          // If task ID contains timestamp (format: originalId-timestamp), extract original ID
-          let originalId = task.id;
-          const idParts = task.id.split("-");
-          if (
-            idParts.length > 1 &&
-            !isNaN(parseInt(idParts[idParts.length - 1]))
-          ) {
-            // Last part is timestamp, remove it
-            originalId = idParts.slice(0, -1).join("-");
-          }
-
-          const draftTask = {
-            id: originalId,
-            text: task.text,
-            type: task.type,
-            createdAt: task.createdAt || new Date().toISOString(),
-          };
-
-          setDraftTasks((prev) => [...prev, draftTask]);
-        }
-      }
-    }
-
-    // If reordering within draft panel
-    if (
-      activeId !== overId &&
-      !overId.startsWith("time-slot-") &&
-      overId !== "draft-list"
-    ) {
-      const oldIndex = draftTasks.findIndex((t) => t.id === activeId);
-      const newIndex = draftTasks.findIndex((t) => t.id === overId);
-
-      if (oldIndex !== -1 && newIndex !== -1) {
-        setDraftTasks(arrayMove(draftTasks, oldIndex, newIndex));
-      }
+  // Helper function to set current draft tasks based on view
+  const setCurrentDraftTasks = (tasks) => {
+    if (view === "day") {
+      // For day view, update tasks for the current date
+      const dateKey = format(currentDate, "yyyy-MM-dd");
+      setDayDraftTasks((prev) => ({
+        ...prev,
+        [dateKey]: tasks,
+      }));
+    } else if (view === "week") {
+      setWeekDraftTasks(tasks);
+    } else if (view === "month") {
+      setMonthDraftTasks(tasks);
     }
   };
 
@@ -555,6 +724,312 @@ function App() {
     return START_HOUR * 60;
   };
 
+  const addDraftTask = (text, type = "other", id = null) => {
+    const newTask = {
+      id: id || Date.now().toString(),
+      text,
+      type,
+      createdAt: new Date().toISOString(),
+    };
+    const currentTasks = getCurrentDraftTasks();
+    setCurrentDraftTasks([...currentTasks, newTask]);
+  };
+
+  const updateDraftTask = (id, updates) => {
+    const currentTasks = getCurrentDraftTasks();
+    setCurrentDraftTasks(
+      currentTasks.map((task) =>
+        task.id === id ? { ...task, ...updates } : task
+      )
+    );
+  };
+
+  const deleteDraftTask = (id) => {
+    const currentTasks = getCurrentDraftTasks();
+    setCurrentDraftTasks(currentTasks.filter((task) => task.id !== id));
+  };
+
+  // Helper function to check if time slot is available
+  const isTimeSlotAvailable = (
+    date,
+    startTime,
+    duration,
+    excludeTaskId = null
+  ) => {
+    const tasks = scheduledTasks[date] || [];
+    const endTime = startTime + duration;
+
+    for (const task of tasks) {
+      if (excludeTaskId && task.id === excludeTaskId) continue;
+
+      const taskStart = task.startTime || 0;
+      const taskEnd = taskStart + (task.duration || 60);
+
+      // Check for overlap
+      if (startTime < taskEnd && endTime > taskStart) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+
+    if (!over) return;
+
+    const activeId = active.id.toString();
+    const overId = over.id.toString();
+
+    // If dragging to time slot
+    if (overId.startsWith("time-slot-")) {
+      // overId format: time-slot-yyyy-MM-dd-hour
+      const parts = overId.replace("time-slot-", "").split("-");
+      const hour = parseInt(parts[parts.length - 1]); // Last part is the hour
+      const date = parts.slice(0, -1).join("-"); // Previous parts form the date
+
+      // Check if dragged from draft or from timeline
+      if (activeId.startsWith("scheduled-task-")) {
+        // Dragging from timeline to timeline - move scheduled task
+        // activeId format: scheduled-task-yyyy-MM-dd-taskId
+        const withoutPrefix = activeId.replace("scheduled-task-", "");
+        // Date format is yyyy-MM-dd (10 characters + 2 hyphens = 12 characters)
+        // Find the first possible date end position (after 10th character)
+        const oldDate = withoutPrefix.substring(0, 10); // yyyy-MM-dd
+        const taskId = withoutPrefix.substring(11); // Skip hyphen, get taskId
+
+        // Find task
+        const oldTasks = scheduledTasks[oldDate] || [];
+        const task = oldTasks.find((t) => t.id === taskId);
+
+        if (task) {
+          const newStartTime = hour * 60;
+          const duration = task.duration || 60;
+
+          // Check if the new position is available
+          if (isTimeSlotAvailable(date, newStartTime, duration, taskId)) {
+            // If dragging to different date, need to move task
+            if (oldDate !== date) {
+              // Remove from old date
+              setScheduledTasks((prev) => ({
+                ...prev,
+                [oldDate]: prev[oldDate].filter((t) => t.id !== taskId),
+                [date]: [
+                  ...(prev[date] || []),
+                  { ...task, startTime: newStartTime },
+                ],
+              }));
+            } else {
+              // Moving within same day, only update start time
+              setScheduledTasks((prev) => ({
+                ...prev,
+                [date]: prev[date].map((t) =>
+                  t.id === taskId ? { ...t, startTime: newStartTime } : t
+                ),
+              }));
+            }
+          }
+        }
+      } else {
+        // Dragging from draft to timeline
+        // Check which draft type the task comes from
+        let task = null;
+        let sourceDate = null; // For day drafts, track which date it came from
+
+        // Check day drafts first (need to search across all dates)
+        let foundInDayDrafts = false;
+        for (const [dayDate, tasks] of Object.entries(dayDraftTasks)) {
+          const foundTask = tasks.find((t) => t.id === activeId);
+          if (foundTask) {
+            task = foundTask;
+            sourceDate = dayDate;
+            foundInDayDrafts = true;
+            break;
+          }
+        }
+
+        // Check week drafts if not found in day drafts
+        if (!foundInDayDrafts) {
+          const weekTask = weekDraftTasks.find((t) => t.id === activeId);
+          if (weekTask) {
+            task = weekTask;
+          } else {
+            // Check month drafts
+            const monthTask = monthDraftTasks.find((t) => t.id === activeId);
+            if (monthTask) {
+              task = monthTask;
+            }
+          }
+        }
+
+        if (task) {
+          // Add to schedule
+          const newTask = {
+            ...task,
+            id: `${task.id}-${Date.now()}`,
+            date,
+            startTime: hour * 60,
+            duration: task.duration || 60,
+            source: foundInDayDrafts ? "day-draft" : undefined, // Only mark if from day draft
+          };
+
+          setScheduledTasks((prev) => ({
+            ...prev,
+            [date]: [...(prev[date] || []), newTask],
+          }));
+
+          // Remove from source draft
+          if (foundInDayDrafts && sourceDate) {
+            // Remove from day drafts for the specific date
+            setDayDraftTasks((prev) => ({
+              ...prev,
+              [sourceDate]: (prev[sourceDate] || []).filter(
+                (t) => t.id !== activeId
+              ),
+            }));
+          } else {
+            // Remove from week/month drafts
+            if (weekDraftTasks.find((t) => t.id === activeId)) {
+              setWeekDraftTasks(
+                weekDraftTasks.filter((t) => t.id !== activeId)
+              );
+            } else if (monthDraftTasks.find((t) => t.id === activeId)) {
+              setMonthDraftTasks(
+                monthDraftTasks.filter((t) => t.id !== activeId)
+              );
+            }
+          }
+        }
+      }
+    }
+
+    // If dragging to draft list
+    if (overId === "draft-list") {
+      // Check if dragged from timeline
+      if (activeId.startsWith("scheduled-task-")) {
+        // Dragging from timeline to draft
+        const withoutPrefix = activeId.replace("scheduled-task-", "");
+        const oldDate = withoutPrefix.substring(0, 10); // yyyy-MM-dd
+        const taskId = withoutPrefix.substring(11); // Skip hyphen, get taskId
+
+        // Find task
+        const oldTasks = scheduledTasks[oldDate] || [];
+        const task = oldTasks.find((t) => t.id === taskId);
+
+        if (task) {
+          // Remove from schedule
+          setScheduledTasks((prev) => ({
+            ...prev,
+            [oldDate]: prev[oldDate].filter((t) => t.id !== taskId),
+          }));
+
+          // Add to draft, remove time information
+          // If task ID contains timestamp (format: originalId-timestamp), extract original ID
+          let originalId = task.id;
+          const idParts = task.id.split("-");
+          if (
+            idParts.length > 1 &&
+            !isNaN(parseInt(idParts[idParts.length - 1]))
+          ) {
+            // Last part is timestamp, remove it
+            originalId = idParts.slice(0, -1).join("-");
+          }
+
+          const draftTask = {
+            id: originalId,
+            text: task.text,
+            type: task.type,
+            createdAt: task.createdAt || new Date().toISOString(),
+          };
+
+          // Add to day drafts for the date the task was scheduled
+          setDayDraftTasks((prev) => ({
+            ...prev,
+            [oldDate]: [...(prev[oldDate] || []), draftTask],
+          }));
+        }
+      }
+    }
+
+    // If dragging to a day cell in week/month view
+    if (overId.startsWith("day-cell-")) {
+      // Format: day-cell-yyyy-MM-dd
+      const date = overId.replace("day-cell-", "");
+
+      // Check if dragged from week/month drafts
+      const weekTask = weekDraftTasks.find((t) => t.id === activeId);
+      const monthTask = monthDraftTasks.find((t) => t.id === activeId);
+
+      if (weekTask) {
+        // Move from week draft to scheduled tasks (for week view) AND day drafts
+        setWeekDraftTasks(weekDraftTasks.filter((t) => t.id !== activeId));
+
+        // Add to scheduled tasks so it appears in week view right panel
+        const dateObj = new Date(date + "T00:00:00");
+        const startTime = getNextAvailableTime(dateObj);
+        const scheduledTask = {
+          ...weekTask,
+          id: `${weekTask.id}-${Date.now()}`,
+          date: date,
+          startTime: startTime,
+          duration: weekTask.duration || 60,
+          source: "week-draft", // Mark as from week draft
+        };
+        setScheduledTasks((prev) => ({
+          ...prev,
+          [date]: [...(prev[date] || []), scheduledTask],
+        }));
+
+        // Add to day drafts for the specific date
+        setDayDraftTasks((prev) => ({
+          ...prev,
+          [date]: [...(prev[date] || []), weekTask],
+        }));
+      } else if (monthTask) {
+        // Move from month draft to scheduled tasks (for month view) AND day drafts
+        setMonthDraftTasks(monthDraftTasks.filter((t) => t.id !== activeId));
+
+        // Add to scheduled tasks so it appears in month view right panel
+        const dateObj = new Date(date + "T00:00:00");
+        const startTime = getNextAvailableTime(dateObj);
+        const scheduledTask = {
+          ...monthTask,
+          id: `${monthTask.id}-${Date.now()}`,
+          date: date,
+          startTime: startTime,
+          duration: monthTask.duration || 60,
+          source: "month-draft", // Mark as from month draft
+        };
+        setScheduledTasks((prev) => ({
+          ...prev,
+          [date]: [...(prev[date] || []), scheduledTask],
+        }));
+
+        // Add to day drafts for the specific date
+        setDayDraftTasks((prev) => ({
+          ...prev,
+          [date]: [...(prev[date] || []), monthTask],
+        }));
+      }
+    }
+
+    // If reordering within draft panel
+    if (
+      activeId !== overId &&
+      !overId.startsWith("time-slot-") &&
+      overId !== "draft-list" &&
+      !overId.startsWith("day-cell-")
+    ) {
+      const currentTasks = getCurrentDraftTasks();
+      const oldIndex = currentTasks.findIndex((t) => t.id === activeId);
+      const newIndex = currentTasks.findIndex((t) => t.id === overId);
+
+      if (oldIndex !== -1 && newIndex !== -1) {
+        setCurrentDraftTasks(arrayMove(currentTasks, oldIndex, newIndex));
+      }
+    }
+  };
+
   // Add task to schedule (from draft)
   const addTaskToSchedule = (task, date) => {
     const dateKey = format(date, "yyyy-MM-dd");
@@ -570,6 +1045,7 @@ function App() {
       date: dateKey,
       startTime: startTime,
       duration: duration,
+      source: "day-draft", // Mark as from day draft
     };
 
     setScheduledTasks((prev) => ({
@@ -577,8 +1053,9 @@ function App() {
       [dateKey]: [...(prev[dateKey] || []), newTask],
     }));
 
-    // Remove from draft
-    setDraftTasks(draftTasks.filter((t) => t.id !== task.id));
+    // Remove from day drafts for the current date
+    const currentTasks = getCurrentDraftTasks();
+    setCurrentDraftTasks(currentTasks.filter((t) => t.id !== task.id));
   };
 
   const deleteScheduledTask = (date, taskId) => {
@@ -603,8 +1080,20 @@ function App() {
       ...taskWithoutSchedule,
       id: Date.now().toString(),
     };
-    setDraftTasks([...draftTasks, newTask]);
+    const currentTasks = getCurrentDraftTasks();
+    setCurrentDraftTasks([...currentTasks, newTask]);
     deleteScheduledTask(date, task.id);
+  };
+
+  const toggleTaskComplete = (date, taskId, completed) => {
+    updateScheduledTask(date, taskId, { completed });
+  };
+
+  const handleResizeTask = (date, taskId, newStartTime, newDuration) => {
+    updateScheduledTask(date, taskId, {
+      startTime: newStartTime,
+      duration: newDuration,
+    });
   };
 
   return (
@@ -623,7 +1112,7 @@ function App() {
 
         <div className="app-content">
           <DraftPanel
-            tasks={draftTasks}
+            tasks={getCurrentDraftTasks()}
             onAddTask={addDraftTask}
             onDeleteTask={deleteDraftTask}
             onUpdateTask={updateDraftTask}
@@ -631,6 +1120,7 @@ function App() {
             currentDate={currentDate}
             scheduledTasks={scheduledTasks}
             taskTypes={TASK_TYPES}
+            view={view}
           />
 
           <div className="schedule-view">
@@ -641,6 +1131,8 @@ function App() {
                 onDeleteTask={deleteScheduledTask}
                 onUpdateTask={updateScheduledTask}
                 onMoveToDraft={moveTaskToDraft}
+                onToggleComplete={toggleTaskComplete}
+                onResizeTask={handleResizeTask}
                 taskTypes={TASK_TYPES}
               />
             )}
@@ -651,6 +1143,7 @@ function App() {
                 onDeleteTask={deleteScheduledTask}
                 onUpdateTask={updateScheduledTask}
                 onMoveToDraft={moveTaskToDraft}
+                weekDraftTasks={weekDraftTasks}
                 taskTypes={TASK_TYPES}
               />
             )}
@@ -661,6 +1154,7 @@ function App() {
                 onDeleteTask={deleteScheduledTask}
                 onUpdateTask={updateScheduledTask}
                 onMoveToDraft={moveTaskToDraft}
+                monthDraftTasks={monthDraftTasks}
                 taskTypes={TASK_TYPES}
               />
             )}

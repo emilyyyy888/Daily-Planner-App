@@ -14,7 +14,7 @@
 }
 
 .task-item::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: 0;
@@ -85,7 +85,7 @@
 }
 
 .task-action-btn::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 50%;
   left: 50%;
@@ -103,13 +103,21 @@
 }
 
 .task-action-btn:hover {
-  background: linear-gradient(135deg, var(--secondary-color), rgba(255, 182, 193, 0.3));
+  background: linear-gradient(
+    135deg,
+    var(--secondary-color),
+    rgba(255, 182, 193, 0.3)
+  );
   transform: scale(1.15) rotate(5deg);
   box-shadow: 0 4px 12px rgba(255, 182, 193, 0.3);
 }
 
 .task-action-btn.edit:hover {
-  background: linear-gradient(135deg, rgba(255, 182, 193, 0.4), rgba(255, 182, 193, 0.2));
+  background: linear-gradient(
+    135deg,
+    rgba(255, 182, 193, 0.4),
+    rgba(255, 182, 193, 0.2)
+  );
   color: var(--primary-color);
   transform: scale(1.15) rotate(5deg);
   box-shadow: 0 4px 12px rgba(255, 182, 193, 0.3);

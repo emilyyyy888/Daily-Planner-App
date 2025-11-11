@@ -20,6 +20,7 @@ function DraftPanel({
   currentDate,
   scheduledTasks,
   taskTypes,
+  view = "day",
 }) {
   const [inputText, setInputText] = useState("");
   const [selectedType, setSelectedType] = useState("other");
@@ -56,7 +57,9 @@ function DraftPanel({
   return (
     <div className="draft-panel">
       <div className="draft-header">
-        <h2>📝 Task Drafts</h2>
+        <h2>
+          📝 {view === "day" ? "Day" : view === "week" ? "Week" : "Month"} Task Drafts
+        </h2>
         <div className="task-type-selector">
           {taskTypes.map((type) => (
             <button
@@ -102,6 +105,7 @@ function DraftPanel({
               currentDate={currentDate}
               scheduledTasks={scheduledTasks}
               taskTypes={taskTypes}
+              view={view}
             />
           ))}
         </SortableContext>
@@ -133,6 +137,7 @@ function SortableDraftTask({
   currentDate,
   scheduledTasks,
   taskTypes,
+  view = "day",
 }) {
   const {
     attributes,
@@ -254,16 +259,19 @@ function SortableDraftTask({
         isDraggable={true}
         dragListeners={listeners}
       />
-      <div className="draft-task-footer">
-        <span className="draft-task-time">{getDisplayTime()}</span>
-        <button
-          className="draft-task-add-btn"
-          onClick={handleAddToSchedule}
-          title="Add to Schedule"
-        >
-          ➜
-        </button>
-      </div>
+      {/* Only show time and add button for day view */}
+      {view === "day" && (
+        <div className="draft-task-footer">
+          <span className="draft-task-time">{getDisplayTime()}</span>
+          <button
+            className="draft-task-add-btn"
+            onClick={handleAddToSchedule}
+            title="Add to Schedule"
+          >
+            ➜
+          </button>
+        </div>
+      )}
     </div>
   );
 }

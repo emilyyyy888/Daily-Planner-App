@@ -14,6 +14,29 @@
   z-index: 100;
 }
 
+.header-left,
+.header-right {
+  flex: 1;
+  display: flex;
+}
+
+.header-left {
+  justify-content: flex-start;
+}
+
+.header-right {
+  justify-content: flex-end;
+}
+
+.header-center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .app-title {
   font-size: 28px;
   font-weight: 700;
@@ -34,12 +57,6 @@
   50% {
     background-position: 100% 50%;
   }
-}
-
-.header-center {
-  display: flex;
-  align-items: center;
-  gap: 12px;
 }
 
 .nav-btn {
@@ -152,44 +169,6 @@
   box-shadow: 0 4px 20px rgba(255, 182, 193, 0.4);
   transform: translateY(-2px);
   border-color: transparent;
-}
-
-.storage-btn {
-  padding: 8px 16px !important;
-}
-
-.storage-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 8px;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  z-index: 1000;
-  min-width: 150px;
-}
-
-.storage-menu button {
-  padding: 10px 16px;
-  border: none;
-  background: rgba(255, 182, 193, 0.1);
-  border-radius: 8px;
-  color: var(--text-color);
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  text-align: left;
-}
-
-.storage-menu button:hover {
-  background: var(--primary-color);
-  color: white;
-  transform: translateX(4px);
 }
 
 @media (max-width: 768px) {

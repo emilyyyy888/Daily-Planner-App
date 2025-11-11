@@ -4,7 +4,7 @@ import { useDroppable } from '@dnd-kit/core'
 import TaskItem from './TaskItem'
 import './MonthView.css'
 
-function MonthView({ month, scheduledTasks, onDeleteTask, onUpdateTask, onMoveToDraft, taskTypes }) {
+function MonthView({ month, scheduledTasks, onDeleteTask, onUpdateTask, onMoveToDraft, monthDraftTasks = [], taskTypes }) {
   const monthStart = startOfMonth(month)
   const monthEnd = endOfMonth(month)
   const calendarStart = startOfWeek(monthStart, { locale: enUS })
@@ -30,7 +30,11 @@ function MonthView({ month, scheduledTasks, onDeleteTask, onUpdateTask, onMoveTo
         
         {days.map(day => {
           const dateKey = format(day, 'yyyy-MM-dd')
-          const dayTasks = scheduledTasks[dateKey] || []
+          // Only show tasks from week/month drafts in month view (not from day drafts)
+          const allTasks = scheduledTasks[dateKey] || []
+          const dayTasks = allTasks.filter(
+            (task) => !task.source || task.source !== "day-draft"
+          )
           
           return (
             <MonthDayCell
@@ -53,7 +57,7 @@ function MonthView({ month, scheduledTasks, onDeleteTask, onUpdateTask, onMoveTo
 
 function MonthDayCell({ day, dateKey, isCurrentMonth, isToday, tasks, onDeleteTask, onMoveToDraft, taskTypes }) {
   const { setNodeRef, isOver } = useDroppable({
-    id: `time-slot-${dateKey}-0`, // Default to 0:00
+    id: `day-cell-${dateKey}`,
   })
 
   // Sort tasks by start time

@@ -33,8 +33,13 @@ function TaskEditor({
     const time = task.startTime !== undefined ? task.startTime : 9 * 60;
     return time % 60;
   });
-  const [duration, setDuration] = useState(() => {
-    return task.duration !== undefined ? task.duration : 60;
+  const [durationHours, setDurationHours] = useState(() => {
+    const dur = task.duration !== undefined ? task.duration : 60;
+    return Math.floor(dur / 60);
+  });
+  const [durationMinutes, setDurationMinutes] = useState(() => {
+    const dur = task.duration !== undefined ? task.duration : 60;
+    return dur % 60;
   });
   const [selectedType, setSelectedType] = useState(task.type || "other");
   const editorRef = useRef(null);
@@ -49,7 +54,8 @@ function TaskEditor({
     setTaskText(task.text || "");
     setStartHour(Math.floor(newDefaultStartTime / 60));
     setStartMinute(newDefaultStartTime % 60);
-    setDuration(newDefaultDuration);
+    setDurationHours(Math.floor(newDefaultDuration / 60));
+    setDurationMinutes(newDefaultDuration % 60);
     setSelectedType(task.type || "other");
   }, [task.id, task.startTime, task.duration, task.text, task.type]);
 
@@ -80,22 +86,48 @@ function TaskEditor({
 
   const handleSave = () => {
     const newStartTime = startHour * 60 + startMinute;
+    const newDuration = durationHours * 60 + durationMinutes;
     if (isDraft) {
       // When saving draft task, save task text, time info, and task type
       onSave({
         text: taskText.trim(),
         startTime: newStartTime,
-        duration: duration,
+        duration: newDuration,
         type: selectedType,
       });
     } else {
-      // For scheduled tasks, update time and duration
+      // For scheduled tasks, update text, time, duration, and task type
       onSave({
+        text: taskText.trim(),
         startTime: newStartTime,
-        duration: duration,
+        duration: newDuration,
+        type: selectedType,
       });
     }
     onClose();
+  };
+
+  const handleKeyDown = (e) => {
+    // Save on Enter key, but not if user is typing in text input (allow Enter for multi-line)
+    // For number inputs, Enter will save
+    if (e.key === "Enter" && !e.shiftKey) {
+      // Check if the target is a button or if it's a text input
+      const target = e.target;
+      if (
+        target.tagName === "BUTTON" ||
+        target.type === "number" ||
+        (target.type === "text" &&
+          target.className.includes("task-editor-text-input"))
+      ) {
+        e.preventDefault();
+        handleSave();
+      }
+    }
+    // Close on Escape key
+    if (e.key === "Escape") {
+      e.preventDefault();
+      onClose();
+    }
   };
 
   const formatTime = (minutes) => {
@@ -107,9 +139,8 @@ function TaskEditor({
   };
 
   const currentStartTime = startHour * 60 + startMinute;
-  const currentEndTime =
-    currentStartTime +
-    (typeof duration === "number" ? duration : parseInt(duration) || 15);
+  const currentDuration = durationHours * 60 + durationMinutes;
+  const currentEndTime = currentStartTime + currentDuration;
 
   return createPortal(
     <div className="task-editor-overlay" ref={overlayRef} onClick={onClose}>
@@ -117,6 +148,8 @@ function TaskEditor({
         className="task-editor"
         ref={editorRef}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleKeyDown}
+        tabIndex={-1}
       >
         <div className="task-editor-header">
           <h3>{isDraft ? "Edit Draft Task" : "Edit Task"}</h3>
@@ -128,132 +161,184 @@ function TaskEditor({
         <div className="task-editor-content">
           <div className="task-editor-field">
             <label>Task Name</label>
-            {isDraft ? (
-              <input
-                type="text"
-                value={taskText}
-                onChange={(e) => setTaskText(e.target.value)}
-                className="task-editor-text-input"
-                placeholder="Enter task name..."
-              />
-            ) : (
-              <div className="task-editor-text">{task.text}</div>
-            )}
+            <input
+              type="text"
+              value={taskText}
+              onChange={(e) => setTaskText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSave();
+                }
+              }}
+              className="task-editor-text-input"
+              placeholder="Enter task name..."
+            />
           </div>
 
-          {isDraft && (
-            <div className="task-editor-field">
-              <label>Task Type</label>
-              <div className="task-type-selector">
-                {taskTypes.map((type) => (
-                  <button
-                    key={type.id}
-                    type="button"
-                    className={`type-btn ${
-                      selectedType === type.id ? "active" : ""
-                    }`}
-                    onClick={() => setSelectedType(type.id)}
-                    style={{
-                      backgroundColor:
-                        selectedType === type.id ? type.color : "transparent",
-                      borderColor: type.color,
-                      color: selectedType === type.id ? "white" : type.color,
-                    }}
-                  >
-                    {type.name}
-                  </button>
-                ))}
-              </div>
+          <div className="task-editor-field">
+            <label>Task Type</label>
+            <div className="task-type-selector">
+              {taskTypes.map((type) => (
+                <button
+                  key={type.id}
+                  type="button"
+                  className={`type-btn ${
+                    selectedType === type.id ? "active" : ""
+                  }`}
+                  onClick={() => setSelectedType(type.id)}
+                  style={{
+                    backgroundColor:
+                      selectedType === type.id ? type.color : "transparent",
+                    borderColor: type.color,
+                    color: selectedType === type.id ? "white" : type.color,
+                  }}
+                >
+                  {type.name}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
 
           <div className="task-editor-field">
             <label>Start Time</label>
             <div className="time-inputs">
-              <select
+              <input
+                type="number"
+                min="0"
+                max="23"
                 value={startHour}
-                onChange={(e) => setStartHour(parseInt(e.target.value))}
-                className="time-select"
-              >
-                {Array.from({ length: 24 }, (_, i) => (
-                  <option key={i} value={i}>
-                    {i.toString().padStart(2, "0")}
-                  </option>
-                ))}
-              </select>
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "") {
+                    setStartHour(0);
+                    return;
+                  }
+                  const value = parseInt(val, 10);
+                  if (!isNaN(value) && value >= 0 && value <= 23) {
+                    setStartHour(value);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleSave();
+                  }
+                }}
+                onBlur={(e) => {
+                  if (
+                    e.target.value === "" ||
+                    isNaN(parseInt(e.target.value, 10))
+                  ) {
+                    setStartHour(0);
+                  }
+                }}
+                className="time-input-number"
+                placeholder="00"
+              />
               <span>:</span>
-              <select
+              <input
+                type="number"
+                min="0"
+                max="59"
                 value={startMinute}
-                onChange={(e) => setStartMinute(parseInt(e.target.value))}
-                className="time-select"
-              >
-                {[0, 15, 30, 45].map((min) => (
-                  <option key={min} value={min}>
-                    {min.toString().padStart(2, "0")}
-                  </option>
-                ))}
-              </select>
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === "") {
+                    setStartMinute(0);
+                    return;
+                  }
+                  const value = parseInt(val, 10);
+                  if (!isNaN(value) && value >= 0 && value <= 59) {
+                    setStartMinute(value);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleSave();
+                  }
+                }}
+                onBlur={(e) => {
+                  if (
+                    e.target.value === "" ||
+                    isNaN(parseInt(e.target.value, 10))
+                  ) {
+                    setStartMinute(0);
+                  }
+                }}
+                className="time-input-number"
+                placeholder="00"
+              />
             </div>
           </div>
 
           <div className="task-editor-field">
             <label>Duration</label>
             <div className="duration-options">
-              {DURATION_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  className={`duration-btn ${
-                    duration === option.value ? "active" : ""
-                  }`}
-                  onClick={() => setDuration(option.value)}
-                >
-                  {option.label}
-                </button>
-              ))}
+              {DURATION_OPTIONS.map((option) => {
+                const optionHours = Math.floor(option.value / 60);
+                const optionMinutes = option.value % 60;
+                const isActive =
+                  durationHours === optionHours &&
+                  durationMinutes === optionMinutes;
+                return (
+                  <button
+                    key={option.value}
+                    className={`duration-btn ${isActive ? "active" : ""}`}
+                    onClick={() => {
+                      setDurationHours(optionHours);
+                      setDurationMinutes(optionMinutes);
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
             </div>
             <div className="duration-custom">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={duration === "" ? "" : duration}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  // Only allow numeric input
-                  if (value === "" || /^\d+$/.test(value)) {
-                    if (value === "") {
-                      setDuration("");
-                    } else {
-                      const numValue = parseInt(value);
-                      if (numValue <= 480) {
-                        setDuration(numValue);
-                      } else {
-                        setDuration(480);
-                      }
+              <div className="time-inputs">
+                <input
+                  type="number"
+                  min="0"
+                  max="23"
+                  value={durationHours}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 0;
+                    if (value >= 0 && value <= 23) {
+                      setDurationHours(value);
                     }
-                  }
-                }}
-                onBlur={(e) => {
-                  const value = e.target.value;
-                  if (
-                    value === "" ||
-                    isNaN(parseInt(value)) ||
-                    parseInt(value) < 15
-                  ) {
-                    setDuration(15);
-                  } else {
-                    const numValue = parseInt(value);
-                    if (numValue > 480) {
-                      setDuration(480);
-                    } else {
-                      // Round to nearest multiple of 15
-                      setDuration(Math.round(numValue / 15) * 15);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleSave();
                     }
-                  }
-                }}
-                className="duration-input"
-                placeholder="Enter minutes"
-              />
-              <span>min</span>
+                  }}
+                  className="duration-input-number"
+                />
+                <span>hours</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="59"
+                  value={durationMinutes}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 0;
+                    if (value >= 0 && value <= 59) {
+                      setDurationMinutes(value);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleSave();
+                    }
+                  }}
+                  className="duration-input-number"
+                />
+                <span>minutes</span>
+              </div>
             </div>
           </div>
 
