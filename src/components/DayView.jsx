@@ -192,6 +192,7 @@ function DraggableScheduledTask({
   const resizeMoveHandlerRef = useRef(null);
   const resizeEndHandlerRef = useRef(null);
   const accumulatedDeltaRef = useRef(0); // Track accumulated pixel movement
+  const justFinishedResizingRef = useRef(false); // Track if we just finished resizing
 
   const handleResizeMove = useCallback(
     (e) => {
@@ -284,8 +285,11 @@ function DraggableScheduledTask({
     if (e) {
       e.stopPropagation();
       e.preventDefault();
+      e.stopImmediatePropagation();
     }
 
+    // Mark that we just finished resizing to prevent click events
+    justFinishedResizingRef.current = true;
     setIsResizing(false);
     resizeStartRef.current = null;
     resizeTypeRef.current = null;
@@ -314,6 +318,13 @@ function DraggableScheduledTask({
         true
       );
     }
+
+    // Reset the flag after a short delay to allow click events again
+    setTimeout(() => {
+      justFinishedResizingRef.current = false;
+      dragStartPosRef.current = null;
+      hasDraggedRef.current = false;
+    }, 100);
   }, []);
 
   resizeMoveHandlerRef.current = handleResizeMove;
@@ -418,6 +429,10 @@ function DraggableScheduledTask({
     if (e.target.closest(".task-block-actions")) {
       return;
     }
+    // Don't trigger click if we're resizing or just finished resizing
+    if (isResizing || justFinishedResizingRef.current) {
+      return;
+    }
     // Stop propagation to prevent triggering background time slot events
     e.stopPropagation();
     // Check if it's really just a click (no movement)
@@ -428,7 +443,7 @@ function DraggableScheduledTask({
       if (!moved && !isDragging) {
         // Delay slightly to ensure drag event is processed
         setTimeout(() => {
-          if (!isDragging) {
+          if (!isDragging && !isResizing && !justFinishedResizingRef.current) {
             onTaskClick(task);
           }
         }, 50);
@@ -463,8 +478,13 @@ function DraggableScheduledTask({
       onClick={(e) => {
         // Stop propagation to prevent triggering background time slot events
         e.stopPropagation();
-        // Only trigger click if it wasn't a drag
-        if (!hasDraggedRef.current && !isDragging) {
+        // Don't trigger click if we're resizing, dragging, or just finished resizing
+        if (
+          !hasDraggedRef.current &&
+          !isDragging &&
+          !isResizing &&
+          !justFinishedResizingRef.current
+        ) {
           onTaskClick(task);
         }
       }}
